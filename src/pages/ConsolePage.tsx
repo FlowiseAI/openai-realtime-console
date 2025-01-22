@@ -399,7 +399,6 @@ export function ConsolePage() {
    * Set all of our instructions, tools, events and more
    */
   useEffect(() => {
-    // Get refs
     const wavStreamPlayer = wavStreamPlayerRef.current;
     const client = clientRef.current;
 
@@ -408,7 +407,6 @@ export function ConsolePage() {
     // Set transcription, otherwise we don't get user transcriptions back
     client.updateSession({ input_audio_transcription: { model: 'whisper-1' } });
 
-    // execute fetch request to get the tools
     const fetchTools = async () => {
       const response = await fetch(`${FLOWISE_BASE_URL}/api/v1/openai-realtime/${FLOWISE_CHATFLOW_ID}`, {
         method: 'GET',
@@ -417,47 +415,44 @@ export function ConsolePage() {
           'Authorization': 'Bearer ' + FLOWISE_API_KEY
         }
       });
-      const tools = await response.json();
-      if (tools) {
-        setTools(tools);
-        for (const tool of tools) {
-          if (Object.hasOwnProperty.call(client.tools, tool.name)) continue
-          client.addTool(tool,
-            async (args: any) => {
-              const response = await fetch(`${FLOWISE_BASE_URL}/api/v1/openai-realtime/${FLOWISE_CHATFLOW_ID}`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer ' + FLOWISE_API_KEY
-                },
-                body: JSON.stringify({
-                  chatId: sessionID,
-                  toolName: tool.name,
-                  inputArgs: args,
-                }),
-              });
-              const result = await response.json();
-              const toolOutput = result.output;
-              const sources = result.sourceDocuments;
-              const artifacts = result.artifacts;
+      const data = await response.json();
+      const tools = Array.isArray(data) ? data : [];
+      setTools(tools);
+      for (const tool of tools) {
+        if (Object.hasOwnProperty.call(client.tools, tool.name)) continue
+        client.addTool(tool, async (args: any) => {
+          const response = await fetch(`${FLOWISE_BASE_URL}/api/v1/openai-realtime/${FLOWISE_CHATFLOW_ID}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + FLOWISE_API_KEY
+            },
+            body: JSON.stringify({
+              chatId: sessionID,
+              toolName: tool.name,
+              inputArgs: args,
+            }),
+          });
+          const result = await response.json();
+          const toolOutput = result.output;
+          const sources = result.sourceDocuments;
+          const artifacts = result.artifacts;
 
-              setTools((tools) => {
-                const newTools = [...tools];
-                const toolIndex = newTools.findIndex((t) => t.name === tool.name);
-                if (toolIndex >= 0) {
-                  const newTool = { ...newTools[toolIndex] };
-                  newTool.messages = newTool.messages || [];
-                  newTool.messages.push({ type: 'input', content: JSON.stringify(args) });
-                  newTool.messages.push({ type: 'output', content: toolOutput, sources, artifacts });
-                  newTools[toolIndex] = newTool;
-                }
-                return newTools;
-              });
-
-              return toolOutput;
+          setTools((tools) => {
+            const newTools = [...tools];
+            const toolIndex = newTools.findIndex((t) => t.name === tool.name);
+            if (toolIndex >= 0) {
+              const newTool = { ...newTools[toolIndex] };
+              newTool.messages = newTool.messages || [];
+              newTool.messages.push({ type: 'input', content: JSON.stringify(args) });
+              newTool.messages.push({ type: 'output', content: toolOutput, sources, artifacts });
+              newTools[toolIndex] = newTool;
             }
-          );
-        };
+            return newTools;
+          });
+
+          return toolOutput;
+        });
       }
     };
 
